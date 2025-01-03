@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Transitradar</string>
+    <string name="title_activity_maps">TransitRadar</string>
+    <string name="search">Search</string>
+</resources>
