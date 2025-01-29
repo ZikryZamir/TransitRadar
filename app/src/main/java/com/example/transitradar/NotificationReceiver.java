@@ -44,7 +44,7 @@ public class NotificationReceiver extends BroadcastReceiver {
                 // Calculate the ETA
                 double distance = calculateDistance(currentLocation.getLatitude(), currentLocation.getLongitude(),
                         notification.getLatitude(), notification.getLongitude());
-                double eta = (distance / 43.33) * 60; // ETA in minutes
+                double eta = (distance / 41.13) * 60; // ETA in minutes
                 String tripid = notification.getTripId();
                 Pattern pattern = Pattern.compile("\\d+");
                 Matcher matcher = pattern.matcher(tripid);

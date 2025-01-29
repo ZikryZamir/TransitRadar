@@ -26,7 +26,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Tg Malim - Port Klang Line"
+            android:text="KTM Komuter Pelabuhan Klang Line"
             android:textSize="16sp"
             android:paddingTop="16dp" />
 
@@ -35,19 +35,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layoutDirection="rtl"
-            android:text="to Port Klang" />
+            android:text="Southbound (to Port Klang)" />
 
         <RadioButton
             android:id="@+id/radioButtonLine1Southbound"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layoutDirection="rtl"
-            android:text="to Tg Malim" />
+            android:text="Northbound (to Tg Malim)" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Batu Caves - P. Sebang Line"
+            android:text="KTM Komuter Seremban Line"
             android:textSize="16sp"
             android:paddingTop="16dp" />
 
@@ -56,14 +56,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layoutDirection="rtl"
-            android:text="to P. Sebang" />
+            android:text="Southbound (to P. Sebang)" />
 
         <RadioButton
             android:id="@+id/radioButtonLine2Southbound"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layoutDirection="rtl"
-            android:text="to Batu Caves" />
+            android:text="Northbound (to Batu Caves)" />
 
     </RadioGroup>
 

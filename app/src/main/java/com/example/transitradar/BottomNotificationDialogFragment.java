@@ -99,7 +99,7 @@ public class BottomNotificationDialogFragment extends BottomSheetDialogFragment 
                 }
                 double distance = calculateDistance(currentLocation.getLatitude(), currentLocation.getLongitude(),
                         notification.getLatitude(), notification.getLongitude());
-                double eta = (distance / 43.33) * 60; // ETA in minutes
+                double eta = (distance / 41.13) * 60; // ETA in minutes
                 View notificationView = getLayoutInflater().inflate(R.layout.notification_item, notificationContainer, false);
                 TextView textTripId = notificationView.findViewById(R.id.text_trip_id);
                 TextView textEta = notificationView.findViewById(R.id.text_eta);
@@ -113,15 +113,32 @@ public class BottomNotificationDialogFragment extends BottomSheetDialogFragment 
                     String routeText;
                     if (firstTwoNumbersInt % 2 == 0) {
                         if (nextTwoNumbersInt % 2 == 0) {
-                            routeText = " (P. Sebang - Batu Caves)";
+                            routeText = " (P. Sebang > Batu Caves)";
                         } else {
-                            routeText = " (Batu Caves - P. Sebang)";
+                            routeText = " (Batu Caves > P. Sebang)";
                         }
                     } else {
                         if (nextTwoNumbersInt % 2 == 0) {
-                            routeText = " (Port Klang - Tg Malim)";
+                            if (nextTwoNumbersInt == 4 ||
+                                    nextTwoNumbersInt == 10 ||
+                                    nextTwoNumbersInt == 12 ||
+                                    nextTwoNumbersInt == 18 ||
+                                    nextTwoNumbersInt == 22 ||
+                                    nextTwoNumbersInt == 26) {
+                                routeText = " (Port Klang > Tg Malim)";
+                            } else {
+                                routeText = " (KL Sentral > Tg Malim)";
+                            }
                         } else {
-                            routeText = " (Tg Malim - Port Klang)";
+                            if (nextTwoNumbersInt == 63 ||
+                                    nextTwoNumbersInt == 67 ||
+                                    nextTwoNumbersInt == 71 ||
+                                    nextTwoNumbersInt == 75 ||
+                                    nextTwoNumbersInt == 79) {
+                                routeText = " (Tg Malim > Port Klang)";
+                            } else {
+                                routeText = " (Tg Malim > KL Sentral)";
+                            }
                         }
                     }
                     textTripId.setText("Trip No.: " + matcher.group() + routeText);

@@ -29,6 +29,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -75,7 +76,7 @@ public class BottomMarkerDialogFragment extends BottomSheetDialogFragment {
             SpeedTextView.setText((int) locationModel.getSpeed() + " km/h");
             double distance = calculateDistance(currentLocation.getLatitude(), currentLocation.getLongitude(),
                     locationModel.getLatitude(), locationModel.getLongitude());
-            double eta = (distance / 43.33) * 60; // ETA in minutes
+            double eta = (distance / 41.13) * 60; // ETA in minutes
             if (matcher.find()) {
                 tripIdTextView.setText(matcher.group());
                 int firstTwoNumbersInt = Integer.parseInt(matcher.group(1));
@@ -83,15 +84,32 @@ public class BottomMarkerDialogFragment extends BottomSheetDialogFragment {
                 String routeText;
                 if (firstTwoNumbersInt % 2 == 0) {
                     if (nextTwoNumbersInt % 2 == 0) {
-                        routeText = "P. Sebang - Batu Caves";
+                        routeText = "P. Sebang > Batu Caves";
                     } else {
-                        routeText = "Batu Caves - P. Sebang";
+                        routeText = "Batu Caves > P. Sebang";
                     }
                 } else {
                     if (nextTwoNumbersInt % 2 == 0) {
-                        routeText = "Port Klang - Tg Malim";
+                        if (nextTwoNumbersInt == 4 ||
+                                nextTwoNumbersInt == 10 ||
+                                nextTwoNumbersInt == 12 ||
+                                nextTwoNumbersInt == 18 ||
+                                nextTwoNumbersInt == 22 ||
+                                nextTwoNumbersInt == 26) {
+                            routeText = "Port Klang > Tg Malim";
+                        } else {
+                            routeText = "KL Sentral > Tg Malim";
+                        }
                     } else {
-                        routeText = "Tg Malim - Port Klang";
+                        if (nextTwoNumbersInt == 63 ||
+                                nextTwoNumbersInt == 67 ||
+                                nextTwoNumbersInt == 71 ||
+                                nextTwoNumbersInt == 75 ||
+                                nextTwoNumbersInt == 79) {
+                            routeText = "Tg Malim > Port Klang";
+                        } else {
+                            routeText = "Tg Malim > KL Sentral";
+                        }
                     }
                 }
                 RouteTextView.setText(routeText);

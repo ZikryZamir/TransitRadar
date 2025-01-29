@@ -53,8 +53,8 @@ public class BottomAlertDialogFragment extends BottomSheetDialogFragment {
 
         LinearLayout lineContainer = view.findViewById(R.id.line_container);
 
-        addKtm(lineContainer);
-        addKtm1(lineContainer);
+//        addKtm(lineContainer);
+//        addKtm1(lineContainer);
 
         if (locationList != null && !locationList.isEmpty()) {
             for (LocationModel2 location : locationList) {
@@ -63,43 +63,43 @@ public class BottomAlertDialogFragment extends BottomSheetDialogFragment {
         }
     }
 
-    private void addKtm1(LinearLayout container) {
-        View lineView = getLayoutInflater().inflate(R.layout.line_item_layout, container, false);
-
-        TextView lineNameTextView = lineView.findViewById(R.id.line_name);
-        TextView lineStatusTextView = lineView.findViewById(R.id.line_status);
-        TextView lineRemarkTextView = lineView.findViewById(R.id.line_remark);
-        View light = lineView.findViewById(R.id.light);
-
-        lineNameTextView.setText("KTM Batu Caves - P. Sebang Line");
-        if (locationModels != null && !locationModels.isEmpty()) {
-            lineStatusTextView.setText("Status: Normal Service");
-        } else {
-            lineStatusTextView.setText("Status: Down");
-            lineRemarkTextView.setText("Remark: API returned 0 data");
-            light.setBackgroundResource(R.drawable.circle_red);
-        }
-        container.addView(lineView);
-    }
-
-    private void addKtm(LinearLayout container) {
-        View lineView = getLayoutInflater().inflate(R.layout.line_item_layout, container, false);
-
-        TextView lineNameTextView = lineView.findViewById(R.id.line_name);
-        TextView lineStatusTextView = lineView.findViewById(R.id.line_status);
-        TextView lineRemarkTextView = lineView.findViewById(R.id.line_remark);
-        View light = lineView.findViewById(R.id.light);
-
-        lineNameTextView.setText("KTM Tg Malim - Port Klang Line");
-        if (locationModels != null && !locationModels.isEmpty()) {
-            lineStatusTextView.setText("Status: Normal Service");
-        } else {
-            lineStatusTextView.setText("Status: Down");
-            lineRemarkTextView.setText("Remark: API returned 0 data");
-            light.setBackgroundResource(R.drawable.circle_red);
-        }
-        container.addView(lineView);
-    }
+//    private void addKtm1(LinearLayout container) {
+//        View lineView = getLayoutInflater().inflate(R.layout.line_item_layout, container, false);
+//
+//        TextView lineNameTextView = lineView.findViewById(R.id.line_name);
+//        TextView lineStatusTextView = lineView.findViewById(R.id.line_status);
+//        TextView lineRemarkTextView = lineView.findViewById(R.id.line_remark);
+//        View light = lineView.findViewById(R.id.light);
+//
+//        lineNameTextView.setText("KTM Batu Caves - P. Sebang Line");
+//        if (locationModels != null && !locationModels.isEmpty()) {
+//            lineStatusTextView.setText("Status: Normal Service");
+//        } else {
+//            lineStatusTextView.setText("Status: Down");
+//            lineRemarkTextView.setText("Remark: API returned 0 data");
+//            light.setBackgroundResource(R.drawable.circle_red);
+//        }
+//        container.addView(lineView);
+//    }
+//
+//    private void addKtm(LinearLayout container) {
+//        View lineView = getLayoutInflater().inflate(R.layout.line_item_layout, container, false);
+//
+//        TextView lineNameTextView = lineView.findViewById(R.id.line_name);
+//        TextView lineStatusTextView = lineView.findViewById(R.id.line_status);
+//        TextView lineRemarkTextView = lineView.findViewById(R.id.line_remark);
+//        View light = lineView.findViewById(R.id.light);
+//
+//        lineNameTextView.setText("KTM Tg Malim - Port Klang Line");
+//        if (locationModels != null && !locationModels.isEmpty()) {
+//            lineStatusTextView.setText("Status: Normal Service");
+//        } else {
+//            lineStatusTextView.setText("Status: Down");
+//            lineRemarkTextView.setText("Remark: API returned 0 data");
+//            light.setBackgroundResource(R.drawable.circle_red);
+//        }
+//        container.addView(lineView);
+//    }
 
     //display the service status for each line
     private void addLineToContainer(LinearLayout container, LocationModel2 location) {
@@ -115,7 +115,17 @@ public class BottomAlertDialogFragment extends BottomSheetDialogFragment {
                 lineRemarkTextView.setText("Remark: " + location.getRemark());
                 light.setBackgroundResource(R.drawable.circle_yellow);
             }
-            container.addView(lineView);
+
+            if ("KA_Komuter".equals(location.getLineId())) {
+                // Add to the top of the container
+                container.addView(lineView, 1);
+            } else if ("KC_Komuter".equals(location.getLineId())) {
+                // Add to the top of the container
+                container.addView(lineView, 2);
+            } else {
+                // Add to the bottom of the container
+                container.addView(lineView);
+            }
         }
     }
 }

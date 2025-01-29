@@ -12,6 +12,8 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -46,6 +48,7 @@ import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.example.transitradar.databinding.ActivityMapsBinding;
@@ -58,6 +61,8 @@ import android.view.MenuItem;
 import android.widget.PopupMenu;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -144,6 +149,25 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
         mHandler = new Handler();
         UiSettings uiSettings = mMap.getUiSettings();
         uiSettings.setRotateGesturesEnabled(false);
+
+        boolean isDarkTheme = (getResources().getConfiguration().uiMode &
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+
+        int styleRes = isDarkTheme ? R.raw.map_style_dark : R.raw.map_style_light;
+
+        try {
+            boolean success = mMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(this, styleRes));
+            if (!success) {
+                Log.e("MapStyle", "Style parsing failed.");
+            }
+        } catch (Resources.NotFoundException e) {
+            Log.e("MapStyle", "Can't find style. Error: ", e);
+        }
+
+        LatLng initialLocation = new LatLng(3.039411, 101.615959); // Replace with your desired latitude and longitude
+        float zoomLevel = 10.0f; // Adjust zoom level as needed
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(initialLocation, zoomLevel));
+
         getAllDataLocation();
         fetchData();
 
@@ -282,6 +306,14 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
 
     //Displaying dropdown list in the search button
     public void showDropdownMenu(View view) {
+        Collections.sort(cleanedData, new Comparator<LocationModel>() {
+            @Override
+            public int compare(LocationModel o1, LocationModel o2) {
+                String tripId1 = o1.getTripId();
+                String tripId2 = o2.getTripId();
+                return tripId1.compareTo(tripId2); // Sorts lexicographically (numeric sorting works as trip IDs are numeric)
+            }
+        });
         PopupMenu popupMenu = new PopupMenu(this, view);
         // Add a title item
         popupMenu.getMenu().add(Menu.NONE, Menu.NONE, Menu.NONE, "Search by Trip Number:")
@@ -297,15 +329,32 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
                 String routeText;
                 if (firstTwoNumbersInt % 2 == 0) {
                     if (nextTwoNumbersInt % 2 == 0) {
-                        routeText = " (P. Sebang - Batu Caves)";
+                        routeText = " (P. Sebang > Batu Caves)";
                     } else {
-                        routeText = " (Batu Caves - P. Sebang)";
+                        routeText = " (Batu Caves > P. Sebang)";
                     }
                 } else {
                     if (nextTwoNumbersInt % 2 == 0) {
-                        routeText = " (Port Klang - Tg Malim)";
+                        if (nextTwoNumbersInt == 4 ||
+                                nextTwoNumbersInt == 10 ||
+                                nextTwoNumbersInt == 12 ||
+                                nextTwoNumbersInt == 18 ||
+                                nextTwoNumbersInt == 22 ||
+                                nextTwoNumbersInt == 26) {
+                            routeText = " (Port Klang > Tg Malim)";
+                        } else {
+                            routeText = " (KL Sentral > Tg Malim)";
+                        }
                     } else {
-                        routeText = " (Tg Malim - Port Klang)";
+                        if (nextTwoNumbersInt == 63 ||
+                                nextTwoNumbersInt == 67 ||
+                                nextTwoNumbersInt == 71 ||
+                                nextTwoNumbersInt == 75 ||
+                                nextTwoNumbersInt == 79) {
+                            routeText = " (Tg Malim > Port Klang)";
+                        } else {
+                            routeText = " (Tg Malim > KL Sentral)";
+                        }
                     }
                 }
                 popupMenu.getMenu().add(Menu.NONE, i, Menu.NONE, matcher.group() + routeText);
