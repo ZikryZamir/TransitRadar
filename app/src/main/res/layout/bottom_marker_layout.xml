@@ -84,6 +84,22 @@
             android:layout_height="wrap_content"
             android:layout_columnWeight="1"
             android:layout_marginTop="5dp"
+            android:text="Current Station:    "
+            android:gravity="end"/>
+
+        <TextView
+            android:id="@+id/mStation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:layout_marginTop="5dp"
+            android:text=""/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:layout_marginTop="5dp"
             android:text="Estimated Time Arrival:    "
             android:gravity="end"/>
 

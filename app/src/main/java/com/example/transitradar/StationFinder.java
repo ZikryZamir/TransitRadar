@@ -1,33 +1,8 @@
 package com.example.transitradar;
 
-import android.location.Location;
-import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import com.example.transitradar.model.LocationModel;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-public class BottomMarkerDialogFragment extends BottomSheetDialogFragment {
-    private static final String ARG_LOCATION_MODEL = "location_model";
-    private static final String ARG_CURRENT_LOCATION = "current_location";
-    private static List<LocationModel> notificationList = new ArrayList<>();
-    private LocationModel locationModel;
-    private Location currentLocation;
-
+public class StationFinder {
     private static class Station {
         String name;
         double latitude;
@@ -40,7 +15,6 @@ public class BottomMarkerDialogFragment extends BottomSheetDialogFragment {
         }
     }
 
-    // Port Klang - Tg Malim stations (trip IDs 21 or 23)
     private static final Station[] LINE_1_STATIONS = {
             new Station("Pelabuhan Klang", 2.999658116433375, 101.39138498016024),
             new Station("Jalan Kastam", 3.0135252319906076, 101.4029748933128),
@@ -78,7 +52,6 @@ public class BottomMarkerDialogFragment extends BottomSheetDialogFragment {
             new Station("Tanjung Malim", 3.6849179473667406, 101.51804264224288)
     };
 
-    // Batu Caves - P Sebang stations (trip IDs 20 or 22)
     private static final Station[] LINE_2_STATIONS = {
             new Station("Batu Caves", 3.2377480242979013, 101.68114410489461),
             new Station("Taman Wahyu", 3.2145019574401728, 101.67216396667675),
@@ -109,88 +82,38 @@ public class BottomMarkerDialogFragment extends BottomSheetDialogFragment {
             new Station("Pulau Sebang", 2.463961922106007, 102.22547356839846)
     };
 
-    public static BottomMarkerDialogFragment newInstance(LocationModel locationModel, Location currentLocation) {
-        BottomMarkerDialogFragment fragment = new BottomMarkerDialogFragment();
-        Bundle args = new Bundle();
-        args.putSerializable(ARG_LOCATION_MODEL, (Serializable) locationModel);
-        args.putParcelable(ARG_CURRENT_LOCATION, currentLocation);
-        fragment.setArguments(args);
-        return fragment;
-    }
+    public static String getClosestStationName(LocationModel location) {
+        Station[] stations = determineStationLine(location.getTripId());
+        if (stations == null) return "Unknown";
 
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        if (getArguments() != null) {
-            locationModel = (LocationModel) getArguments().getSerializable(ARG_LOCATION_MODEL);
-            currentLocation = getArguments().getParcelable(ARG_CURRENT_LOCATION);
-        }
-    }
+        Station closestStation = null;
+        double minDistance = Double.MAX_VALUE;
 
-    //Displaying Train Information
-    @Nullable
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.bottom_marker_layout, container, false);
-        TextView RegTextView = view.findViewById(R.id.mReg);
-        TextView tripIdTextView = view.findViewById(R.id.mTrip);
-        TextView SpeedTextView = view.findViewById(R.id.mSpeed);
-        TextView RouteTextView = view.findViewById(R.id.mRoute);
-        TextView StationTextView = view.findViewById(R.id.mStation);
-        TextView etaTextView = view.findViewById(R.id.mEta);
-        Button notifyMeButton = view.findViewById(R.id.setNotificationButton);
-        if (locationModel != null && currentLocation != null) {
-            Pattern pattern = Pattern.compile("(\\d{2})(\\d{2})");
-            Matcher matcher = pattern.matcher(locationModel.getTripId());
-            RegTextView.setText(locationModel.getLabel());
-            SpeedTextView.setText((int) locationModel.getSpeed() + " km/h");
-            double distance = calculateDistance(currentLocation.getLatitude(), currentLocation.getLongitude(),
-                    locationModel.getLatitude(), locationModel.getLongitude());
-            double eta = (distance / 41.13) * 60; // ETA in minutes
-            etaTextView.setText((int) eta + " minutes");
-            if (matcher.find()) {
-                tripIdTextView.setText(matcher.group());
-                String routeText = RouteDeterminer.determineRouteText(locationModel.getTripId());
-                RouteTextView.setText(routeText);
-
-                //Station determination
-                String closestStation = StationFinder.getClosestStationName(locationModel);
-                StationTextView.setText(closestStation);
+        for (Station station : stations) {
+            double distance = calculateDistance(
+                    location.getLatitude(), location.getLongitude(),
+                    station.latitude, station.longitude
+            );
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestStation = station;
             }
         }
-
-        //function for notify me button
-        notifyMeButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (locationModel != null) {
-                    boolean tripIdExists = false;
-                    for (LocationModel model : notificationList) {
-                        if (model.getTripId().equals(locationModel.getTripId())) {
-                            tripIdExists = true;
-                            break;
-                        }
-                    }
-                    if (!tripIdExists) {
-                        notificationList.add(locationModel);
-                        Holder.setNotificationList(notificationList);
-                        Toast.makeText(getContext(), "Added to notification list", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(getContext(), "Already in notification list", Toast.LENGTH_SHORT).show();
-                    }
-                    dismiss();
-                    List<LocationModel> currentNotificationList = Holder.getNotificationList();
-                    BottomNotificationDialogFragment notificationFragment = BottomNotificationDialogFragment.newInstance();
-                    notificationFragment.show(getParentFragmentManager(), notificationFragment.getTag());
-                }
-            }
-        });
-        return view;
+        return closestStation != null ? closestStation.name : "Unknown";
     }
 
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    private static Station[] determineStationLine(String tripId) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(\\d{2})(\\d{2})");
+        java.util.regex.Matcher matcher = pattern.matcher(tripId);
+        if (!matcher.find()) return null;
+
+        int lineNumber = Integer.parseInt(matcher.group(1));
+        return (lineNumber == 21 || lineNumber == 23) ? LINE_1_STATIONS : LINE_2_STATIONS;
+    }
+
+    private static double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         float[] results = new float[1];
-        Location.distanceBetween(lat1, lon1, lat2, lon2, results);
-        return results[0] / 1000.0; // convert meters to kilometers
+        android.location.Location.distanceBetween(lat1, lon1, lat2, lon2, results);
+        return results[0] / 1000.0; // Convert meters to kilometers
     }
 }
