@@ -4,27 +4,42 @@ import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
+import org.osmdroid.config.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
 import android.widget.PopupMenu;
 import android.widget.Toast;
 
+import org.osmdroid.events.MapEventsReceiver;
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase;
+import org.osmdroid.util.BoundingBox;
+import org.osmdroid.util.GeoPoint;
+import org.osmdroid.util.MapTileIndex;
+import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.MapEventsOverlay;
+import org.osmdroid.views.overlay.Marker;
+import org.osmdroid.api.IMapController;
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
+import org.osmdroid.views.overlay.Overlay;
+import org.osmdroid.views.overlay.Polyline;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
-
 import com.example.transitradar.databinding.ActivityMapsBinding;
 import com.example.transitradar.model.ListLocationModel;
 import com.example.transitradar.model.ListLocationModel2;
@@ -36,39 +51,23 @@ import com.example.transitradar.network.ApiService;
 import com.example.transitradar.network.ApiService2;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.maps.CameraUpdateFactory;
-import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.UiSettings;
-import com.google.android.gms.maps.model.BitmapDescriptor;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
-import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.LatLngBounds;
-import com.google.android.gms.maps.model.MapStyleOptions;
-import com.google.android.gms.maps.model.Marker;
-import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.maps.model.Polyline;
-import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class Maps extends FragmentActivity implements OnMapReadyCallback {
+public class Maps extends FragmentActivity {
     private static final int FINE_LOCATION_PERMISSION_CODE = 1;
     private static final String TAG = "Maps";
     private static final String NOTIFICATION_CHANNEL_ID = "TRAIN_ETA_CHANNEL";
-    private GoogleMap mMap;
+    private MapView mapView;
+    private IMapController mapController;
     private FusedLocationProviderClient fusedLocationProviderClient;
     private Location currentLocation;
     private Runnable updateRunnable;
@@ -82,6 +81,7 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Configuration.getInstance().load(getApplicationContext(), PreferenceManager.getDefaultSharedPreferences(getApplicationContext()));
         setupBinding();
         initializeLocationClient();
         setupBottomNavigation();
@@ -90,17 +90,6 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
         timerManager = TimerManager.getInstance();
         getLastLocation();
     }
-
-    @Override
-    public void onMapReady(@NonNull GoogleMap googleMap) {
-        mMap = googleMap;
-        configureMapUiSettings();
-        applyMapStyle();
-        setInitialCameraPosition();
-        setupMapListeners();
-        initializeDataFetching();
-    }
-
 
     private void setupBinding() {
         com.example.transitradar.databinding.ActivityMapsBinding binding = ActivityMapsBinding.inflate(getLayoutInflater());
@@ -136,37 +125,83 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
     }
 
     private void configureMapUiSettings() {
-        UiSettings uiSettings = mMap.getUiSettings();
-        uiSettings.setRotateGesturesEnabled(false);
+        mapView.setMultiTouchControls(true); // Enable pinch zoom and multi-touch
+        mapView.setBuiltInZoomControls(false); // Hide default zoom buttons
+        mapView.getController().setZoom(14.5); // Optional default zoom
+        mapView.setTilesScaledToDpi(true); // Makes map look sharper on HD screens
+
+        // Disable rotation (OsmDroid allows disabling gestures differently)
+        mapView.setMapOrientation(0.0f); // Lock to north-up orientation
     }
 
     private void applyMapStyle() {
-        boolean isDarkTheme = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
-                == Configuration.UI_MODE_NIGHT_YES;
-        int styleRes = isDarkTheme ? R.raw.map_style_dark : R.raw.map_style_light;
-        try {
-            if (!mMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(this, styleRes))) {
-                Log.e(TAG, "Style parsing failed.");
-            }
-        } catch (Resources.NotFoundException e) {
-            Log.e(TAG, "Can't find style. Error: ", e);
+        int nightModeFlags = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        boolean isDarkTheme = (nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES);
+
+        if (isDarkTheme) {
+            // Use a dark-themed tile source (CartoDB Dark Matter)
+            mapView.setTileSource(new OnlineTileSourceBase(
+                    "CartoDB Dark Matter", 0, 19, 256, ".png",
+                    new String[]{"https://basemaps.cartocdn.com/dark_all/"},
+                    "© OpenStreetMap contributors, © CARTO") {
+                @Override
+                public String getTileURLString(long pMapTileIndex) {
+                    return getBaseUrl()
+                            + MapTileIndex.getZoom(pMapTileIndex)
+                            + "/" + MapTileIndex.getX(pMapTileIndex)
+                            + "/" + MapTileIndex.getY(pMapTileIndex)
+                            + mImageFilenameEnding;
+                }
+            });
+        } else {
+            // Use the default light map (OpenStreetMap standard)
+            mapView.setTileSource(TileSourceFactory.MAPNIK);
         }
     }
 
     private void setInitialCameraPosition() {
-        LatLng initialLocation = new LatLng(3.039411, 101.615959);
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(initialLocation, 10.0f));
+        // Replace LatLng with GeoPoint (used by OsmDroid)
+        GeoPoint initialLocation = new GeoPoint(3.039411, 101.615959);
+        if (mapController != null) {
+            mapController.setCenter(initialLocation);
+            mapController.setZoom(10.0);
+        }
     }
 
     private void setupMapListeners() {
-        mMap.setOnMarkerClickListener(marker -> {
-            showBottomSheetDialog(marker);
-            drawTrainLine(marker);
-            return true;
-        });
-        mMap.setOnMapClickListener(latLng -> clearCurrentPolyline());
-        mMap.setInfoWindowAdapter(new TestInfoWindowAdapter());
+        // Remove the old Google Maps style listeners, since OsmDroid uses marker-based callbacks.
+        Log.d(TAG, "showBottomSheetDialog about to be called");
+        // Instead, we’ll loop through markers and attach listeners as they’re added.
+        for (Overlay overlay : mapView.getOverlays()) {
+            if (overlay instanceof Marker) {
+                Marker marker = (Marker) overlay;
+                Log.d(TAG, "showBottomSheetDialog about to be called");
+                // When the train icon is clicked:
+                marker.setOnMarkerClickListener((clickedMarker, mapView) -> {
+                    Log.d(TAG, "showBottomSheetDialog will be called");
+                    showBottomSheetDialog(clickedMarker); // ✅ same behavior
+                    HighlightTrainLine(clickedMarker);
+                    return true; // prevent default info window
+                });
+            }
+        }
+
+        // Handle map taps (to clear any drawn polyline)
+        mapView.getOverlays().add(new MapEventsOverlay(new MapEventsReceiver() {
+            @Override
+            public boolean singleTapConfirmedHelper(GeoPoint p) {
+                clearCurrentPolyline();
+                return false;
+            }
+
+            @Override
+            public boolean longPressHelper(GeoPoint p) {
+                return false;
+            }
+        }));
     }
+
+
 
     private void initializeDataFetching() {
         updateRunnable = () -> {
@@ -201,18 +236,31 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
     }
 
     private void initializeMap() {
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-                .findFragmentById(R.id.map);
-        if (mapFragment != null) {
-            mapFragment.getMapAsync(this);
+        mapView = findViewById(R.id.map);
+        mapView.setTileSource(TileSourceFactory.MAPNIK);
+        mapView.setMultiTouchControls(true);
+
+        mapController = mapView.getController();
+        mapController.setZoom(14.5);
+
+        if (currentLocation != null) {
+            GeoPoint startPoint = new GeoPoint(currentLocation.getLatitude(), currentLocation.getLongitude());
+            mapController.setCenter(startPoint);
+            Marker marker = new Marker(mapView);
+            marker.setPosition(startPoint);
+            marker.setTitle("You are here");
+            mapView.getOverlays().add(marker);
         }
+        Log.d(TAG, "setupMapListeners about to be called");
+        setupMapListeners();
+        initializeDataFetching();
     }
 
     private void getAllDataLocation() {
         ApiService apiService = ApiClient.getRetrofit();
         apiService.getAllLocation("ktmb").enqueue(new Callback<ListLocationModel>() {
             @Override
-            public void onResponse(Call<ListLocationModel> call, Response<ListLocationModel> response) {
+            public void onResponse(@NonNull Call<ListLocationModel> call, @NonNull Response<ListLocationModel> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     cleanedData = cleanData(response.body().getmData());
                     Holder.setLocationModels(cleanedData);
@@ -272,78 +320,160 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
     }
 
     private void initMarker(List<LocationModel> data) {
-        mMap.clear();
+        // Clear all overlays (removes existing markers, lines, etc.)
+        mapView.getOverlays().clear();
         addUserLocationMarker();
-        if (data.isEmpty()) {
+
+        if (data == null || data.isEmpty()) {
             showToast("No location data");
             return;
         }
+
         addTrainMarkers(data);
+        drawTrainLines();
+
+        // Refresh the map to show new overlays
+        mapView.invalidate();
     }
 
     private void addUserLocationMarker() {
-        LatLng userLocation = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
-        mMap.addMarker(new MarkerOptions()
-                .position(userLocation)
-                .title("My Location")
-                .icon(BitmapDescriptorFactory.fromResource(R.drawable.self30)));
-        if (initialZoomFlag == 0) {
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(userLocation, 11.0f));
+        if (currentLocation == null) return;
+
+        GeoPoint userLocation = new GeoPoint(currentLocation.getLatitude(), currentLocation.getLongitude());
+        Marker userMarker = new Marker(mapView);
+        userMarker.setPosition(userLocation);
+        userMarker.setTitle("My Location");
+
+        // Set custom icon
+        Drawable icon = ContextCompat.getDrawable(this, R.drawable.self30);
+        userMarker.setIcon(icon);
+
+        mapView.getOverlays().add(userMarker);
+
+        // Set initial camera zoom if not already done
+        if (initialZoomFlag == 0 && mapController != null) {
+            mapController.setCenter(userLocation);
+            mapController.setZoom(11.0);
             initialZoomFlag++;
         }
     }
 
     private void addTrainMarkers(List<LocationModel> data) {
-        BitmapDescriptor iconSCS = createScaledIcon(R.drawable.scs);
-        BitmapDescriptor iconEMU = createScaledIcon(R.drawable.emu);
-        LatLngBounds.Builder boundsBuilder = new LatLngBounds.Builder();
-
+        mapView.getOverlays().clear(); // optional: clear old markers
+        Log.d(TAG, "addTrainMarkers is called");
         for (LocationModel model : data) {
-            LatLng position = new LatLng(model.getLatitude(), model.getLongitude());
-            MarkerOptions options = new MarkerOptions().position(position);
-            float rotation = (float) (model.getBearing() == 0 ? 0 : model.getBearing() - 180);
+            GeoPoint position = new GeoPoint(model.getLatitude(), model.getLongitude());
 
-            if (model.getBearing() == 0) {
-                options.icon(model.getLabel().startsWith("S") ? iconSCS : iconEMU);
+            Marker marker = new Marker(mapView);
+            marker.setPosition(position);
+            marker.setTitle(model.getLabel());
+
+            // 👇 Choose which icon to use
+            if (model.getLabel().startsWith("S")) {
+                Drawable trainIcon = createScaledIcon(R.drawable.scs);
+                marker.setIcon(trainIcon);
             } else {
-                options.icon(BitmapDescriptorFactory.fromResource(R.drawable.train));
+                Drawable trainIcon = createScaledIcon(R.drawable.emu);
+                marker.setIcon(trainIcon);
             }
-            options.rotation(rotation);
 
-            Marker marker = mMap.addMarker(options);
-            marker.setTag(model);
-            boundsBuilder.include(position);
+            marker.setRelatedObject(model);
+
+            marker.setOnMarkerClickListener((m, mapView) -> {
+                showBottomSheetDialog(m);
+                return true; // consume the click (no default popup)
+            });
+
+            mapView.getOverlays().add(marker);
         }
+        mapView.invalidate(); // refresh map to show markers
     }
 
-    private BitmapDescriptor createScaledIcon(int resourceId) {
+    private Drawable createScaledIcon(int resourceId) {
         Bitmap original = BitmapFactory.decodeResource(getResources(), resourceId);
         Bitmap scaled = Bitmap.createScaledBitmap(original, 68, 95, false);
-        return BitmapDescriptorFactory.fromBitmap(scaled);
+        return new BitmapDrawable(getResources(), scaled);
     }
 
-    private void drawTrainLine(Marker marker) {
-        LocationModel info = (LocationModel) marker.getTag();
+    private void HighlightTrainLine(Marker marker) {
+        LocationModel info = (LocationModel) marker.getRelatedObject(); // OsmDroid version of setTag/getTag
         if (info == null) return;
 
         clearCurrentPolyline();
-        List<LatLng> route = getTrainRoute(info);
+
+        List<GeoPoint> route = getTrainRoute(info); // Make sure this returns GeoPoints, not LatLngs
+
+        // Extract line number from tripId
         Pattern pattern = Pattern.compile("(\\d{2})(\\d{2})");
         Matcher matcher = pattern.matcher(info.getTripId());
 
         if (matcher.find()) {
             int lineNumber = Integer.parseInt(matcher.group(1));
-            String color = (lineNumber == 21 || lineNumber == 23) ? "#EC6A5C" : "#4A90E2";
-            currentPolyline = mMap.addPolyline(new PolylineOptions()
-                    .clickable(true)
-                    .addAll(route)
-                    .color(Color.parseColor(color))
-                    .width(5));
+            String colorHex = (lineNumber == 21 || lineNumber == 23) ? "#FF0000" : "#0000FF";
+
+            Polyline polyline = new Polyline(mapView);
+            polyline.setPoints(route);
+            polyline.setWidth(10f);
+            polyline.setColor(Color.parseColor(colorHex));
+            polyline.setOnClickListener((polyline1, mapView1, eventPos) -> {
+                // Optional: handle clicks on train line
+                return true;
+            });
+
+            mapView.getOverlays().add(polyline);
+            currentPolyline = polyline;
         }
+
+        mapView.invalidate();
     }
 
-    private List<LatLng> getTrainRoute(LocationModel info) {
-        List<LatLng> route = new ArrayList<>();
+    private void drawTrainLines() {
+        // Draw Line 1 (Red)
+        List<GeoPoint> line1Route = parseLineString(getLine1String());
+        Polyline line1 = new Polyline();
+        line1.setPoints(line1Route);
+        line1.getOutlinePaint().setColor(Color.parseColor("#EC6A5C")); // Red
+        line1.getOutlinePaint().setStrokeWidth(5f);
+        line1.setTitle("Line 1");
+
+        // Draw Line 2 (Blue)
+        List<GeoPoint> line2Route = parseLineString(getLine2String());
+        Polyline line2 = new Polyline();
+        line2.setPoints(line2Route);
+        line2.getOutlinePaint().setColor(Color.parseColor("#4A90E2")); // Blue
+        line2.getOutlinePaint().setStrokeWidth(5f);
+        line2.setTitle("Line 2");
+
+        // Add both lines to the map
+        mapView.getOverlays().add(line1);
+        mapView.getOverlays().add(line2);
+
+        // Refresh map
+        mapView.invalidate();
+    }
+
+
+    private List<GeoPoint> parseLineString(String lineString) {
+        List<GeoPoint> route = new ArrayList<>();
+        String cleanedLineString = lineString
+                .replace("LINESTRING (", "")
+                .replace(")", "")
+                .trim();
+
+        String[] points = cleanedLineString.split(",\\s*");
+        for (String point : points) {
+            String[] latLng = point.trim().split(" ");
+            // WKT format: "longitude latitude"
+            double lon = Double.parseDouble(latLng[0]);
+            double lat = Double.parseDouble(latLng[1]);
+            route.add(new GeoPoint(lat, lon));
+        }
+        return route;
+    }
+
+
+    private List<GeoPoint> getTrainRoute(LocationModel info) {
+        List<GeoPoint> route = new ArrayList<>();
         Pattern pattern = Pattern.compile("(\\d{2})(\\d{2})");
         Matcher matcher = pattern.matcher(info.getTripId());
 
@@ -353,7 +483,7 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
             String[] points = lineString.replace("LINESTRING (", "").replace(")", "").split(", ");
             for (String point : points) {
                 String[] latLng = point.split(" ");
-                route.add(new LatLng(Double.parseDouble(latLng[1]), Double.parseDouble(latLng[0])));
+                route.add(new GeoPoint(Double.parseDouble(latLng[1]), Double.parseDouble(latLng[0])));
             }
         }
         return route;
@@ -369,15 +499,16 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
     }
 
     private void clearCurrentPolyline() {
-        if (currentPolyline != null) {
-            currentPolyline.remove();
+        if (currentPolyline != null && mapView != null) {
+            mapView.getOverlays().remove(currentPolyline);
+            mapView.invalidate(); // refresh the map
             currentPolyline = null;
         }
     }
 
+
     public void applyFilter(String filter) {
         timerManager.unsubscribe(filterRunnable);
-       String currentFilter = filter;
 
         if (filter == null) {
             timerManager.subscribe(updateRunnable); // Ensure all trains are shown immediately
@@ -423,7 +554,7 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
 
     //dropdown menu
     public void showDropdownMenu(View view) {
-        Collections.sort(cleanedData, Comparator.comparing(LocationModel::getTripId));
+        cleanedData.sort(Comparator.comparing(LocationModel::getTripId));
         PopupMenu popup = new PopupMenu(this, view);
         popup.getMenu().add("Search by Trip Number:").setEnabled(false);
 
@@ -445,15 +576,18 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
         Matcher matcher = pattern.matcher(tripId);
         if (!matcher.find()) return tripId;
 
-        String numbernroute = matcher.group() +" "+RouteDeterminer.determineRouteText(tripId);
-        return numbernroute;
+        return matcher.group() +" "+RouteDeterminer.determineRouteText(tripId);
     }
 
     //camera animation on dropdown menu
     private void moveCameraToMarker(LocationModel marker) {
-        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
-                new LatLng(marker.getLatitude(), marker.getLongitude()), 15.0f));
+        if (mapController != null && marker != null) {
+            GeoPoint point = new GeoPoint(marker.getLatitude(), marker.getLongitude());
+            mapController.animateTo(point);  // Smooth camera movement
+            mapController.setZoom(15.0);     // Zoom level (similar to Google Maps zoom)
+        }
     }
+
 
     //filter popup menu
     private void showFilterDialog() {
@@ -472,15 +606,16 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
 
     //notification popup
     private void showNotificationDialog() {
-        List<LocationModel> notificationList = Holder.getNotificationList();
         BottomNotificationDialogFragment.newInstance()
                 .show(getSupportFragmentManager(), "BottomNotificationDialogFragment");
     }
 
     //marker popup
     private void showBottomSheetDialog(Marker marker) {
-        LocationModel info = (LocationModel) marker.getTag();
-        if (info != null) {
+        Log.d(TAG, "showBottomSheetDialog IS CALLED!!!");
+        Object relatedObject = marker.getRelatedObject(); // ✅ instead of getTag()
+        if (relatedObject instanceof LocationModel) {
+            LocationModel info = (LocationModel) relatedObject; // ✅ explicit cast
             BottomMarkerDialogFragment.newInstance(info, currentLocation)
                     .show(getSupportFragmentManager(), "BottomMarkerDialogFragment");
         }
@@ -528,19 +663,5 @@ public class Maps extends FragmentActivity implements OnMapReadyCallback {
 
     private void showToast(String message) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-    }
-
-    private class TestInfoWindowAdapter implements GoogleMap.InfoWindowAdapter {
-        @Nullable
-        @Override
-        public View getInfoContents(@NonNull Marker marker) {
-            return null; // Using bottom sheet instead
-        }
-
-        @Nullable
-        @Override
-        public View getInfoWindow(@NonNull Marker marker) {
-            return null; // Using bottom sheet instead
-        }
     }
 }
